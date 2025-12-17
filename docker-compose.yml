@@ -56,6 +56,7 @@ services:
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
+      - ./agents:/agents
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -63,8 +64,13 @@ services:
       - POSTGRES_PASSWORD=loanifi_password
       - POSTGRES_DB=loanifi_db
       - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB=loanifi_conversations
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+      - SECRET_KEY=${SECRET_KEY:-your_secret_key_here_change_in_production}
+      - ENVIRONMENT=development
+      - DEBUG=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,7 +87,7 @@ services:
       dockerfile: Dockerfile
     container_name: loanifi_frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
     volumes:
       - ./frontend:/app
       - /app/node_modules

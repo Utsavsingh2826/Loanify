@@ -77,7 +77,7 @@ class LoanApplication(Base):
     sanction_letter_generated_at = Column(DateTime, nullable=True)
     
     # Additional metadata
-    metadata = Column(JSONB, default={})
+    app_metadata = Column(JSONB, default={})
     notes = Column(Text, nullable=True)
 
 

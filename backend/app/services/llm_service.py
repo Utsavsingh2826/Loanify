@@ -13,7 +13,7 @@ class LLMService:
     def __init__(self):
         """Initialize OpenAI client."""
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4-turbo-preview"
+        self.model = "gpt-4o-mini"
     
     async def chat_completion(
         self,
@@ -22,7 +22,7 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 1000
     ) -> Dict[str, Any]:
-        """Get chat completion from GPT-4."""
+        """Get chat completion from GPT-4o-mini."""
         try:
             kwargs = {
                 "model": self.model,
@@ -31,31 +31,42 @@ class LLMService:
                 "max_tokens": max_tokens
             }
             
+            # Convert functions to tools format for GPT-4o-mini compatibility
             if functions:
-                kwargs["functions"] = functions
-                kwargs["function_call"] = "auto"
+                tools = [{"type": "function", "function": func} for func in functions]
+                kwargs["tools"] = tools
+                kwargs["tool_choice"] = "auto"
             
             response = await self.client.chat.completions.create(**kwargs)
             
+            message = response.choices[0].message
             result = {
-                "content": response.choices[0].message.content,
-                "role": response.choices[0].message.role,
+                "content": message.content,
+                "role": message.role,
                 "function_call": None
             }
             
-            if hasattr(response.choices[0].message, 'function_call'):
-                result["function_call"] = response.choices[0].message.function_call
+            # Handle tool calls (new format) or function_call (old format)
+            if hasattr(message, 'tool_calls') and message.tool_calls:
+                # Convert tool_call to function_call format for compatibility
+                tool_call = message.tool_calls[0]
+                result["function_call"] = {
+                    "name": tool_call.function.name,
+                    "arguments": tool_call.function.arguments
+                }
+            elif hasattr(message, 'function_call') and message.function_call:
+                result["function_call"] = message.function_call
             
             logger.info(
                 "llm_completion",
                 model=self.model,
-                tokens=response.usage.total_tokens
+                tokens=response.usage.total_tokens if hasattr(response, 'usage') else 0
             )
             
             return result
             
         except Exception as e:
-            logger.error("llm_error", error=str(e))
+            logger.error("llm_error", error=str(e), error_type=type(e).__name__)
             raise
     
     async def chat_completion_stream(

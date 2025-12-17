@@ -13,7 +13,8 @@ class MasterAgent(BaseAgent):
     def __init__(self):
         """Initialize master agent."""
         # Load system prompt
-        prompt_path = os.path.join("agents", "prompts", "master_prompt.txt")
+        # Path resolution: prompts are mounted at /agents in container
+        prompt_path = "/agents/prompts/master_prompt.txt"
         with open(prompt_path, "r", encoding="utf-8") as f:
             system_prompt = f.read()
         

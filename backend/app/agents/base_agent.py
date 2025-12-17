@@ -66,13 +66,22 @@ class BaseAgent(ABC):
                 )
                 
                 # Get final response after function execution
+                # Use tool_calls format for GPT-4o-mini
                 messages.append({
                     "role": "assistant",
                     "content": None,
-                    "function_call": response["function_call"]
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": response["function_call"]["name"],
+                            "arguments": response["function_call"].get("arguments", "{}")
+                        }
+                    }]
                 })
                 messages.append({
-                    "role": "function",
+                    "role": "tool",
+                    "tool_call_id": "call_1",
                     "name": response["function_call"]["name"],
                     "content": str(function_result)
                 })

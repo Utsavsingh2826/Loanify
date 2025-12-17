@@ -14,7 +14,8 @@ class SanctionAgent(BaseAgent):
     
     def __init__(self):
         """Initialize sanction agent."""
-        prompt_path = os.path.join("agents", "prompts", "sanction_prompt.txt")
+        # Path resolution: prompts are mounted at /agents in container
+        prompt_path = "/agents/prompts/sanction_prompt.txt"
         with open(prompt_path, "r", encoding="utf-8") as f:
             system_prompt = f.read()
         

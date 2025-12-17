@@ -5,10 +5,11 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import uuid
+import hashlib
 
 from app.utils.database import get_db, get_mongo_db
 from app.utils.logger import get_logger
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.conversation import Conversation, Message, ConversationStatus, MessageRole, AgentType
 from app.models.loan_application import LoanApplication, ApplicationStatus
 from app.agents.master_agent import MasterAgent
@@ -21,6 +22,56 @@ from app.utils.cache import cache
 
 logger = get_logger(__name__)
 router = APIRouter()
+
+
+def get_or_create_user(user_id: str, db: Session) -> uuid.UUID:
+    """
+    Get or create a user from frontend user_id string.
+    Converts string user_id to UUID deterministically or creates new user.
+    """
+    # Try to parse as UUID first
+    try:
+        user_uuid = uuid.UUID(user_id)
+        # Check if user exists
+        user = db.query(User).filter(User.id == user_uuid).first()
+        if user:
+            return user_uuid
+    except (ValueError, TypeError):
+        # Not a valid UUID, need to create or find user
+        pass
+    
+    # Generate deterministic UUID from string user_id
+    # Use SHA256 hash to create consistent UUID
+    hash_obj = hashlib.sha256(user_id.encode())
+    hash_bytes = hash_obj.digest()
+    # Create UUID5 from namespace and hash (deterministic)
+    namespace = uuid.UUID('6ba7b810-9dad-11d1-80b4-00c04fd430c8')  # DNS namespace
+    user_uuid = uuid.uuid5(namespace, user_id)
+    
+    # Check if user already exists
+    user = db.query(User).filter(User.id == user_uuid).first()
+    if user:
+        return user_uuid
+    
+    # Create new user
+    # Extract phone from user_id if possible, otherwise use a placeholder
+    # Use hash to create a unique phone number
+    phone_hash = hash_hex[:10] if 'hash_hex' in locals() else hashlib.sha256(user_id.encode()).hexdigest()[:10]
+    phone = user_id if user_id.startswith("+") else f"+91{phone_hash}"
+    
+    new_user = User(
+        id=user_uuid,
+        phone=phone,
+        role=UserRole.CUSTOMER,
+        is_active=True,
+        is_verified=False
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    logger.info("user_created", user_id=str(user_uuid), frontend_user_id=user_id)
+    return user_uuid
 
 
 # Request/Response models
@@ -61,6 +112,9 @@ async def send_message(
 ):
     """Send a message and get response from appropriate agent."""
     try:
+        # Get or create user from frontend user_id
+        user_uuid = get_or_create_user(request.user_id, db)
+        
         # Get or create conversation
         if request.conversation_id:
             conversation = db.query(Conversation).filter(
@@ -73,7 +127,7 @@ async def send_message(
             # Create new conversation
             conversation = Conversation(
                 id=uuid.uuid4(),
-                user_id=request.user_id,
+                user_id=user_uuid,
                 status=ConversationStatus.ACTIVE,
                 current_agent=AgentType.MASTER,
                 conversation_state={},
@@ -87,7 +141,7 @@ async def send_message(
             application = LoanApplication(
                 id=uuid.uuid4(),
                 application_number=f"APP{str(uuid.uuid4())[:8].upper()}",
-                user_id=request.user_id,
+                user_id=user_uuid,
                 conversation_id=conversation.id,
                 status=ApplicationStatus.INITIATED
             )
